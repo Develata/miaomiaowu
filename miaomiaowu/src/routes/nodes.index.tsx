@@ -1612,10 +1612,16 @@ function NodesPage() {
     try {
       // 获取节点的 clash 配置（按 nodeOrder 排序）
       const nodeIdsSet = new Set(nodeIds)
-      const nodesData = displayNodes
-        .filter(n => n.isSaved && n.dbId && nodeIdsSet.has(n.dbId))
-        .map(n => savedNodes.find(s => s.id === n.dbId))
-        .filter(Boolean) as typeof savedNodes
+      // 直接从 savedNodes 获取，按 nodeOrder 排序
+      const orderMap = new Map<number, number>()
+      nodeOrder.forEach((id, index) => orderMap.set(id, index))
+      const nodesData = savedNodes
+        .filter(n => nodeIdsSet.has(n.id))
+        .sort((a, b) => {
+          const orderA = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER
+          const orderB = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER
+          return orderA - orderB
+        })
       const proxies = nodesData.map(node => {
         try {
           return JSON.parse(node.clash_config)
@@ -1642,7 +1648,7 @@ function NodesPage() {
     } finally {
       setTempSubGenerating(false)
     }
-  }, [selectedNodeIds, savedNodes, displayNodes, tempSubMaxAccess, tempSubExpireSeconds])
+  }, [selectedNodeIds, savedNodes, nodeOrder, tempSubMaxAccess, tempSubExpireSeconds])
 
   // 自动生成临时订阅：Dialog 打开时或参数变化时自动生成
   useEffect(() => {
