@@ -303,7 +303,7 @@ function SubscribeFilesPage() {
   // 编辑节点Dialog状态
   const [editNodesDialogOpen, setEditNodesDialogOpen] = useState(false)
   const [editingNodesFile, setEditingNodesFile] = useState<SubscribeFile | null>(null)
-  const [proxyGroups, setProxyGroups] = useState<Array<{ name: string; type: string; proxies: string[]; use?: string[] }>>([])
+  const [proxyGroups, setProxyGroups] = useState<Array<{ name: string; type: string; proxies: string[]; use?: string[]; dialerProxyGroup?: string }>>([])
   const [showAllNodes, setShowAllNodes] = useState(true)
 
   // 编辑器状态
@@ -1353,6 +1353,7 @@ function SubscribeFilesPage() {
           name: group.name || '',
           type: group.type || '',
           proxies: Array.isArray(group.proxies) ? group.proxies : [],
+          dialerProxyGroup: group['dialer-proxy-group'] || undefined,
         }))
         setProxyGroups(groups)
       }
@@ -1776,15 +1777,8 @@ function SubscribeFilesPage() {
         }
       }
 
-      // 处理链式代理：给落地节点组中的节点添加 dialer-proxy 参数
-      const landingGroup = proxyGroups.find(g => g.name === '🌄 落地节点')
-      const hasRelayGroup = proxyGroups.some(g => g.name === '🌠 中转节点')
-
-      if (landingGroup && hasRelayGroup && parsed.proxies && Array.isArray(parsed.proxies)) {
-        // 获取落地节点组中的所有节点名称
-        const landingNodeNames = new Set(landingGroup.proxies.filter((p): p is string => p !== undefined))
-
-        // 创建节点名称到协议的映射（用于判断是否已是链式代理节点）
+      // 处理链式代理：根据代理组的 dialerProxyGroup 配置添加 dialer-proxy
+      if (parsed.proxies && Array.isArray(parsed.proxies)) {
         const nodeProtocolMap = new Map<string, string>()
         if (nodesQuery.data?.nodes) {
           nodesQuery.data.nodes.forEach((node: any) => {
@@ -1792,21 +1786,20 @@ function SubscribeFilesPage() {
           })
         }
 
-        // 给这些节点添加 dialer-proxy 参数（跳过已经是链式代理的节点）
-        parsed.proxies = parsed.proxies.map((proxy: any) => {
-          if (landingNodeNames.has(proxy.name)) {
-            // 通过协议判断是否为链式代理节点（协议包含 ⇋）
-            const protocol = nodeProtocolMap.get(proxy.name)
-            if (protocol && protocol.includes('⇋')) {
-              return proxy
+        for (const group of proxyGroups) {
+          if (!group.dialerProxyGroup) continue
+          if (!proxyGroups.some(g => g.name === group.dialerProxyGroup)) continue
+
+          const nodeNames = new Set(group.proxies.filter((p): p is string => p !== undefined))
+          parsed.proxies = parsed.proxies.map((proxy: any) => {
+            if (nodeNames.has(proxy.name)) {
+              const protocol = nodeProtocolMap.get(proxy.name)
+              if (protocol && protocol.includes('⇋')) return proxy
+              return { ...proxy, 'dialer-proxy': group.dialerProxyGroup }
             }
-            return {
-              ...proxy,
-              'dialer-proxy': '🌠 中转节点'
-            }
-          }
-          return proxy
-        })
+            return proxy
+          })
+        }
       }
 
       // 更新代理组，保留 use 字段
@@ -1820,6 +1813,11 @@ function SubscribeFilesPage() {
           if (group.use && group.use.length > 0) {
             groupConfig.use = group.use
           }
+          // 保存中转代理组配置
+          if (group.dialerProxyGroup) {
+            groupConfig['dialer-proxy-group'] = group.dialerProxyGroup
+          }
+          delete groupConfig.dialerProxyGroup
           return groupConfig
         })
       }

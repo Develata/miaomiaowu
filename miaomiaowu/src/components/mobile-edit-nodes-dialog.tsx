@@ -46,6 +46,7 @@ interface ProxyGroup {
   interval?: number
   strategy?: 'round-robin' | 'consistent-hashing' | 'sticky-sessions'
   use?: string[]
+  dialerProxyGroup?: string
 }
 
 interface Node {
@@ -391,6 +392,21 @@ export function MobileEditNodesDialog({
     onProxyGroupsChange(newGroups)
   }
 
+  // 处理中转代理组变更
+  const handleDialerProxyGroupChange = (groupName: string, value: string) => {
+    const newGroups = proxyGroups.map(g => {
+      if (g.name !== groupName) return g
+      const updated = { ...g }
+      if (value === '__none__') {
+        delete updated.dialerProxyGroup
+      } else {
+        updated.dialerProxyGroup = value
+      }
+      return updated
+    })
+    onProxyGroupsChange(newGroups)
+  }
+
   // 获取类型显示名称
   const getTypeLabel = (type: string) => {
     return proxyTypes.find(t => t.value === type)?.label || type
@@ -524,6 +540,26 @@ export function MobileEditNodesDialog({
                                       </Select>
                                     </div>
                                   )}
+
+                                  <div className="pt-2 border-t">
+                                    <p className="text-xs text-muted-foreground mb-1">中转代理组</p>
+                                    <Select
+                                      value={group.dialerProxyGroup || '__none__'}
+                                      onValueChange={(value) => handleDialerProxyGroupChange(group.name, value)}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder="无" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__">无</SelectItem>
+                                        {proxyGroups.filter(g => g.name !== group.name).map(g => (
+                                          <SelectItem key={g.name} value={g.name}>
+                                            <Twemoji>{g.name}</Twemoji>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
                                 </div>
                               </PopoverContent>
                             </Popover>
