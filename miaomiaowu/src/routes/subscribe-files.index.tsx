@@ -58,6 +58,7 @@ type SubscribeFile = {
   auto_sync_custom_rules: boolean
   template_filename: string
   selected_tags: string[]
+  custom_short_code?: string
   expire_at?: string | null
   created_at: string
   updated_at: string
@@ -299,6 +300,10 @@ function SubscribeFilesPage() {
   // 过期时间Popover状态
   const [expirePopoverFileId, setExpirePopoverFileId] = useState<number | null>(null)
   const [customDateFileId, setCustomDateFileId] = useState<number | null>(null)
+
+  // 自定义连接Popover状态
+  const [customLinkFileId, setCustomLinkFileId] = useState<number | null>(null)
+  const [customLinkInput, setCustomLinkInput] = useState('')
 
   // 编辑节点Dialog状态
   const [editNodesDialogOpen, setEditNodesDialogOpen] = useState(false)
@@ -2620,6 +2625,107 @@ function SubscribeFilesPage() {
                     headerClassName: 'text-center',
                     cellClassName: 'text-center',
                     width: '90px'
+                  },
+                  {
+                    header: '自定义连接',
+                    cell: (file) => {
+                      const code = file.custom_short_code || ''
+                      return (
+                        <Popover
+                          open={customLinkFileId === file.id}
+                          onOpenChange={(open) => {
+                            if (open) {
+                              setCustomLinkFileId(file.id)
+                              setCustomLinkInput(code)
+                            } else {
+                              setCustomLinkFileId(null)
+                            }
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            {code ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 text-xs font-mono max-w-[80px] truncate px-2">
+                                    {code.length > 6 ? code.slice(0, 6) + '…' : code}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>{code}</TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground px-2">
+                                -
+                              </Button>
+                            )}
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[200px] p-3" align="start">
+                            <div className="space-y-2">
+                              <p className="text-xs text-muted-foreground">仅字母数字</p>
+                              <Input
+                                value={customLinkInput}
+                                onChange={(e) => setCustomLinkInput(e.target.value)}
+                                placeholder="例: mylink"
+                                className="h-8 text-xs font-mono"
+                              />
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs flex-1"
+                                  disabled={updateMetadataMutation.isPending}
+                                  onClick={() => {
+                                    updateMetadataMutation.mutate({
+                                      id: file.id,
+                                      data: {
+                                        name: file.name,
+                                        description: file.description,
+                                        auto_sync_custom_rules: file.auto_sync_custom_rules,
+                                        custom_short_code: customLinkInput.trim() || null,
+                                      }
+                                    }, {
+                                      onSuccess: () => {
+                                        setCustomLinkFileId(null)
+                                        toast.success(customLinkInput.trim() ? '自定义连接已设置' : '自定义连接已清除')
+                                      }
+                                    })
+                                  }}
+                                >
+                                  保存
+                                </Button>
+                                {code && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    disabled={updateMetadataMutation.isPending}
+                                    onClick={() => {
+                                      updateMetadataMutation.mutate({
+                                        id: file.id,
+                                        data: {
+                                          name: file.name,
+                                          description: file.description,
+                                          auto_sync_custom_rules: file.auto_sync_custom_rules,
+                                          custom_short_code: null,
+                                        }
+                                      }, {
+                                        onSuccess: () => {
+                                          setCustomLinkFileId(null)
+                                          toast.success('自定义连接已清除')
+                                        }
+                                      })
+                                    }}
+                                  >
+                                    清除
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )
+                    },
+                    headerClassName: 'text-center',
+                    cellClassName: 'text-center',
+                    width: '120px'
                   },
                   // V3 模板绑定列（仅 v3 模式显示）
                   ...(isV3Mode ? [{
