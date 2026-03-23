@@ -5,7 +5,8 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronUp, Trash2, GripVertical, Link2 } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { ChevronDown, ChevronUp, Trash2, GripVertical, Link2, Variable } from 'lucide-react'
 import { useState } from 'react'
 import { KeywordFilterInput } from './keyword-filter-input'
 import { ProxyTypeSelect } from './proxy-type-select'
@@ -30,6 +31,7 @@ interface ProxyGroupEditorProps {
   isLast?: boolean
   showRegionToggle?: boolean
   isRegionGroup?: boolean
+  variables?: Record<string, string> // 模板自定义变量
 }
 
 const GROUP_TYPE_LABELS: Record<ProxyGroupType, string> = {
@@ -52,6 +54,7 @@ export function ProxyGroupEditor({
   isLast = false,
   showRegionToggle = true,
   isRegionGroup = false,
+  variables,
 }: ProxyGroupEditorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showRelayPicker, setShowRelayPicker] = useState(false)
@@ -265,21 +268,51 @@ export function ProxyGroupEditor({
               placeholder="选择要引用的代理组"
             />
 
+            {/* 模板变量提示 */}
+            {variables && Object.keys(variables).length > 0 && (
+              <div className="flex items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-xs cursor-help border-dashed border-amber-500 text-amber-600 dark:text-amber-400 gap-1">
+                        <Variable className="h-3 w-3" />
+                        模板变量 ({Object.keys(variables).length})
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-md">
+                      <div className="space-y-1 text-xs">
+                        {Object.entries(variables).map(([name, value]) => (
+                          <div key={name} className="flex gap-2">
+                            <span className="font-mono font-semibold">{name}</span>
+                            <span className="truncate max-w-[300px]">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
+
             {/* Row 3-4: Filter Keywords */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <KeywordFilterInput
                 label="筛选关键词 (filter)"
                 value={group.filterKeywords}
                 onChange={(v) => updateField('filterKeywords', v)}
+                onVariableCleared={() => updateField('filterFromVariable', undefined)}
                 placeholder="香港, HK, 港"
                 description="匹配节点名称，用逗号分隔"
+                fromVariable={group.filterFromVariable}
               />
               <KeywordFilterInput
                 label="排除关键词 (exclude-filter)"
                 value={group.excludeFilterKeywords}
                 onChange={(v) => updateField('excludeFilterKeywords', v)}
+                onVariableCleared={() => updateField('excludeFilterFromVariable', undefined)}
                 placeholder="游戏, IPLC"
                 description="排除匹配的节点"
+                fromVariable={group.excludeFilterFromVariable}
               />
             </div>
 

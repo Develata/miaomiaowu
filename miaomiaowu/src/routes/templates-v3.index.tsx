@@ -31,6 +31,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import {
   extractProxyGroups,
+  extractTemplateVariables,
   updateProxyGroups,
   createDefaultFormState,
   parseTemplate,
@@ -76,6 +77,7 @@ function TemplatesV3Page() {
   const [editorTab, setEditorTab] = useState<'visual' | 'yaml'>('visual')
   const [isDirty, setIsDirty] = useState(false)
   const [enableRegionProxyGroups, setEnableRegionProxyGroups] = useState(false)
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({})
 
   // Delete/Rename state
   const [deletingTemplateName, setDeletingTemplateName] = useState<string | null>(null)
@@ -231,7 +233,9 @@ function TemplatesV3Page() {
   useEffect(() => {
     if (templateData && isEditorOpen) {
       setTemplateContent(templateData)
-      const groups = extractProxyGroups(templateData)
+      const vars = extractTemplateVariables(templateData)
+      setTemplateVariables(vars)
+      const groups = extractProxyGroups(templateData, vars)
       setProxyGroups(groups)
       // Auto-enable region proxy groups toggle if any group has includeRegionProxyGroups
       const hasRegionProxyGroups = groups.some(g => g.includeRegionProxyGroups)
@@ -266,7 +270,9 @@ function TemplatesV3Page() {
     if (editorTab === 'visual' && tab === 'yaml') {
       syncProxyGroupsToYaml()
     } else if (editorTab === 'yaml' && tab === 'visual') {
-      setProxyGroups(extractProxyGroups(templateContent))
+      const vars = extractTemplateVariables(templateContent)
+      setTemplateVariables(vars)
+      setProxyGroups(extractProxyGroups(templateContent, vars))
     }
     setEditorTab(tab as 'visual' | 'yaml')
   }
@@ -601,6 +607,7 @@ function TemplatesV3Page() {
                           isLast={index === proxyGroups.length - 1}
                           showRegionToggle={enableRegionProxyGroups}
                           isRegionGroup={regionGroupNames.includes(group.name)}
+                          variables={templateVariables}
                         />
                       ))}
                       <Button variant="outline" className="w-full" onClick={handleAddProxyGroup}>
