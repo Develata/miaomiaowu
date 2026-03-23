@@ -250,6 +250,13 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.5.8 (2026-03-23)
+- 🌈 模板v3支持yaml变量
+- 🌈 节点详情支持yaml展示
+- 🌈 模板v3支持icon与hidden配置
+- 🛠️ fix:订阅绑定模板v3后规则同步没有禁用
+- 🛠️ fix:trojan reality 参数丢失
+- 🛠️ fix:外部订阅同步节点时匹配机制完善
 ### v0.5.7 (2026-03-18)
 - 🌈 支持订阅排序
 - 🌈 优化模板v3中转代理组选择
