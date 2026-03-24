@@ -8,6 +8,8 @@ import { Topbar } from '@/components/layout/topbar'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+
+const CLASH_DRAFT_KEY_PREFIX = 'mmw_clash_config_draft_'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -484,6 +486,9 @@ function NodesPage() {
   const [configFormat, setConfigFormat] = useState<'json' | 'yaml'>(() =>
     (localStorage.getItem('nodeConfigFormat') as 'json' | 'yaml') || 'json'
   )
+  const [isClashDraftRecoveryOpen, setIsClashDraftRecoveryOpen] = useState(false)
+  const pendingClashDraftRef = useRef<any>(null)
+  const clashConfigOriginalRef = useRef<string>('')
 
   // URI 复制状态
   const [uriDialogOpen, setUriDialogOpen] = useState(false)
@@ -816,9 +821,10 @@ function NodesPage() {
       })
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       toast.success('Clash 配置已更新')
+      localStorage.removeItem(CLASH_DRAFT_KEY_PREFIX + variables.nodeId)
       setClashDialogOpen(false)
       // 状态清理会在 onOpenChange 中自动处理
     },
@@ -856,26 +862,43 @@ function NodesPage() {
 
     if (!clashConfig) return
 
+    const nodeId = 'id' in node && typeof node.id === 'number' ? node.id : -1
+
     // 根据当前格式偏好格式化
     const fmt = (localStorage.getItem('nodeConfigFormat') as 'json' | 'yaml') || 'json'
+    let formatted: string
     try {
       const parsed = JSON.parse(clashConfig)
-      const formatted = fmt === 'yaml'
+      formatted = fmt === 'yaml'
         ? dumpYAML(parsed, { indent: 2, lineWidth: -1, noRefs: true })
         : JSON.stringify(parsed, null, 2)
-      setEditingClashConfig({
-        nodeId: 'id' in node && typeof node.id === 'number' ? node.id : -1,
-        config: formatted
-      })
     } catch {
-      setEditingClashConfig({
-        nodeId: 'id' in node && typeof node.id === 'number' ? node.id : -1,
-        config: clashConfig
-      })
+      formatted = clashConfig
     }
+
+    clashConfigOriginalRef.current = formatted
+    setEditingClashConfig({ nodeId, config: formatted })
     setClashConfigError('')
     setJsonErrorLines([])
     setClashDialogOpen(true)
+
+    // Check for local draft
+    if (nodeId !== -1) {
+      const draftJson = localStorage.getItem(CLASH_DRAFT_KEY_PREFIX + nodeId)
+      if (draftJson) {
+        try {
+          const draft = JSON.parse(draftJson)
+          if (draft.config !== formatted) {
+            pendingClashDraftRef.current = draft
+            setIsClashDraftRecoveryOpen(true)
+          } else {
+            localStorage.removeItem(CLASH_DRAFT_KEY_PREFIX + nodeId)
+          }
+        } catch {
+          localStorage.removeItem(CLASH_DRAFT_KEY_PREFIX + nodeId)
+        }
+      }
+    }
   }, [])
 
   // 验证并保存 Clash 配置
@@ -951,6 +974,41 @@ function NodesPage() {
         }
       }
     }
+  }
+
+  // Write clash config draft to localStorage when changed
+  useEffect(() => {
+    if (!editingClashConfig || !clashDialogOpen || editingClashConfig.nodeId === -1) return
+    if (editingClashConfig.config === clashConfigOriginalRef.current) return
+    localStorage.setItem(
+      CLASH_DRAFT_KEY_PREFIX + editingClashConfig.nodeId,
+      JSON.stringify({ nodeId: editingClashConfig.nodeId, config: editingClashConfig.config, savedAt: Date.now() })
+    )
+  }, [editingClashConfig, clashDialogOpen])
+
+  const handleRecoverClashDraft = () => {
+    const draft = pendingClashDraftRef.current
+    if (!draft) return
+    setEditingClashConfig({ nodeId: draft.nodeId, config: draft.config })
+    try {
+      if (configFormat === 'yaml') parseYAML(draft.config)
+      else JSON.parse(draft.config)
+      setClashConfigError('')
+      setJsonErrorLines([])
+    } catch (error) {
+      const label = configFormat === 'yaml' ? 'YAML' : 'JSON'
+      setClashConfigError(`${label} 格式错误: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    setIsClashDraftRecoveryOpen(false)
+    pendingClashDraftRef.current = null
+  }
+
+  const handleDiscardClashDraft = () => {
+    if (editingClashConfig) {
+      localStorage.removeItem(CLASH_DRAFT_KEY_PREFIX + editingClashConfig.nodeId)
+    }
+    setIsClashDraftRecoveryOpen(false)
+    pendingClashDraftRef.current = null
   }
 
   // 切换配置格式
@@ -5460,6 +5518,22 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Clash 配置草稿恢复对话框 */}
+      <AlertDialog open={isClashDraftRecoveryOpen} onOpenChange={setIsClashDraftRecoveryOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>恢复本地缓存</AlertDialogTitle>
+            <AlertDialogDescription>
+              检测到未保存的本地缓存，是否恢复？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDiscardClashDraft}>放弃</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRecoverClashDraft}>恢复</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 探针绑定对话框 */}
       <Dialog open={probeBindingDialogOpen} onOpenChange={setProbeBindingDialogOpen}>

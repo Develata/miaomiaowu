@@ -11,6 +11,8 @@ import { api } from '@/lib/api'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 
+const TEMPLATE_DRAFT_KEY_PREFIX = 'mmw_template_v3_draft_'
+
 import { DataTable } from '@/components/data-table'
 import type { DataTableColumn } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
@@ -69,6 +71,7 @@ function TemplatesV3Page() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false)
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false)
+  const [isDraftRecoveryOpen, setIsDraftRecoveryOpen] = useState(false)
 
   // Editing state
   const [editingTemplateName, setEditingTemplateName] = useState<string | null>(null)
@@ -77,6 +80,7 @@ function TemplatesV3Page() {
   const [editorTab, setEditorTab] = useState<'visual' | 'yaml'>('visual')
   const [isDirty, setIsDirty] = useState(false)
   const isInitLoadRef = useRef(false)
+  const pendingDraftRef = useRef<any>(null)
   const [enableRegionProxyGroups, setEnableRegionProxyGroups] = useState(false)
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({})
 
@@ -145,6 +149,9 @@ function TemplatesV3Page() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rule-templates'] })
       queryClient.invalidateQueries({ queryKey: ['rule-template', editingTemplateName] })
+      if (editingTemplateName) {
+        localStorage.removeItem(TEMPLATE_DRAFT_KEY_PREFIX + editingTemplateName)
+      }
       toast.success('模板保存成功')
       setIsDirty(false)
       // Close editor after successful save
@@ -244,7 +251,26 @@ function TemplatesV3Page() {
       setEnableRegionProxyGroups(hasRegionProxyGroups)
       setIsDirty(false)
       // Allow ProxyGroupSelect's ensureMarkers setTimeout to finish before enabling dirty tracking
-      setTimeout(() => { isInitLoadRef.current = false }, 50)
+      setTimeout(() => {
+        isInitLoadRef.current = false
+        // Check for local draft
+        if (editingTemplateName) {
+          const draftJson = localStorage.getItem(TEMPLATE_DRAFT_KEY_PREFIX + editingTemplateName)
+          if (draftJson) {
+            try {
+              const draft = JSON.parse(draftJson)
+              if (draft.templateContent !== templateData) {
+                pendingDraftRef.current = draft
+                setIsDraftRecoveryOpen(true)
+              } else {
+                localStorage.removeItem(TEMPLATE_DRAFT_KEY_PREFIX + editingTemplateName)
+              }
+            } catch {
+              localStorage.removeItem(TEMPLATE_DRAFT_KEY_PREFIX + editingTemplateName)
+            }
+          }
+        }
+      }, 50)
     }
   }, [templateData, isEditorOpen])
 
@@ -260,6 +286,24 @@ function TemplatesV3Page() {
       setPreviewContent('')
     }
   }, [proxyGroups, isEditorOpen])
+
+  // Write draft to localStorage when dirty
+  useEffect(() => {
+    if (!isDirty || !editingTemplateName || isInitLoadRef.current) return
+    let content = templateContent
+    if (editorTab === 'visual' && proxyGroups.length > 0) {
+      content = updateProxyGroups(templateContent, proxyGroups)
+    }
+    const draft = {
+      templateContent: content,
+      proxyGroups,
+      enableRegionProxyGroups,
+      templateVariables,
+      editorTab,
+      savedAt: Date.now(),
+    }
+    localStorage.setItem(TEMPLATE_DRAFT_KEY_PREFIX + editingTemplateName, JSON.stringify(draft))
+  }, [isDirty, templateContent, proxyGroups, enableRegionProxyGroups, templateVariables, editorTab, editingTemplateName])
 
   // Sync proxy groups to YAML when switching tabs
   const syncProxyGroupsToYaml = useCallback(() => {
@@ -371,6 +415,29 @@ function TemplatesV3Page() {
     setIsDirty(false)
     setIsCloseConfirmOpen(false)
     setEnableRegionProxyGroups(false)
+  }
+
+  const handleRecoverDraft = () => {
+    const draft = pendingDraftRef.current
+    if (!draft) return
+    isInitLoadRef.current = true
+    setTemplateContent(draft.templateContent)
+    setProxyGroups(draft.proxyGroups)
+    setEnableRegionProxyGroups(draft.enableRegionProxyGroups)
+    setTemplateVariables(draft.templateVariables)
+    setEditorTab(draft.editorTab)
+    setIsDirty(true)
+    setTimeout(() => { isInitLoadRef.current = false }, 50)
+    setIsDraftRecoveryOpen(false)
+    pendingDraftRef.current = null
+  }
+
+  const handleDiscardDraft = () => {
+    if (editingTemplateName) {
+      localStorage.removeItem(TEMPLATE_DRAFT_KEY_PREFIX + editingTemplateName)
+    }
+    setIsDraftRecoveryOpen(false)
+    pendingDraftRef.current = null
   }
 
   // Region proxy group names for checking
@@ -775,6 +842,22 @@ function TemplatesV3Page() {
             <AlertDialogAction onClick={doCloseEditor}>
               确定关闭
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Draft Recovery Dialog */}
+      <AlertDialog open={isDraftRecoveryOpen} onOpenChange={setIsDraftRecoveryOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>恢复本地缓存</AlertDialogTitle>
+            <AlertDialogDescription>
+              检测到未保存的本地缓存，是否恢复？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDiscardDraft}>放弃</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRecoverDraft}>恢复</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
