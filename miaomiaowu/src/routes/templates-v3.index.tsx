@@ -588,47 +588,75 @@ function TemplatesV3Page() {
             data={templates}
             getRowKey={(name) => name}
             emptyText="暂无模板，点击上方按钮创建"
+            mobileCard={{
+              header: (name) => <span className="font-medium text-base">{name}</span>,
+              actions: (name) => (
+                <div className="flex items-center gap-4 w-full justify-between px-2">
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(name)} className="flex-1">
+                    <Pencil className="h-4 w-4 mr-1.5" /> 编辑
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleListPreview(name)} className="flex-1">
+                    <Eye className="h-4 w-4 mr-1.5" /> 预览
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(name)} className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10">
+                    <Trash2 className="h-4 w-4 mr-1.5" /> 删除
+                  </Button>
+                </div>
+              )
+            }}
           />
         </CardContent>
       </Card>
 
       {/* Editor Dialog */}
       <Dialog open={isEditorOpen} onOpenChange={(open) => !open && handleCloseEditor()}>
-        <DialogContent className="!w-[85vw] !max-w-[85vw] h-[90vh] flex flex-col" showCloseButton={false}>
+        <DialogContent className={cn(
+          "h-[90vh] flex flex-col",
+          isMobile ? "!w-[95vw] !max-w-[95vw] p-4" : "!w-[85vw] !max-w-[85vw]"
+        )} showCloseButton={false}>
           <DialogHeader className="flex-shrink-0">
-            <div className="flex items-center justify-between">
+            <div className={cn(
+              "flex justify-between gap-4",
+              isMobile ? "flex-col items-start" : "items-center"
+            )}>
               <div>
-                <DialogTitle>{editingTemplateName}</DialogTitle>
+                <DialogTitle className="break-all">{editingTemplateName}</DialogTitle>
                 <DialogDescription>编辑模板配置</DialogDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className={cn(
+                "flex items-center gap-2",
+                isMobile ? "w-full justify-between" : ""
+              )}>
                 {isDirty && <Badge variant="secondary">未保存</Badge>}
-                <Button onClick={handleSave} disabled={updateMutation.isPending}>
-                  <Save className="h-4 w-4 mr-2" />
-                  保存
-                </Button>
-                <Button variant="outline" onClick={handleCloseEditor}>
-                  关闭
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={handleSave} disabled={updateMutation.isPending} size={isMobile ? "sm" : "default"}>
+                    <Save className="h-4 w-4 mr-1 sm:mr-2" />
+                    保存
+                  </Button>
+                  <Button variant="outline" onClick={handleCloseEditor} size={isMobile ? "sm" : "default"}>
+                    关闭
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogHeader>
 
           {/* Mobile: Preview below save button */}
           {isMobile && (
-            <div className="flex-shrink-0 border-b pb-4">
+            <div className="flex-shrink-0 border-b pb-4 mt-2">
               <Collapsible open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
                 <CollapsibleTrigger asChild>
-                  <Button variant="outline" className="w-full">
+                  <Button variant="outline" className="w-full h-8 text-sm">
                     {isPreviewOpen ? '收起配置预览' : '展开配置预览'}
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="mt-4">
+                <CollapsibleContent className="mt-4 h-[250px]">
                   <TemplatePreview
                     content={previewContent}
                     isLoading={isPreviewLoading}
                     onRefresh={handlePreview}
                     title="代理组配置"
+                    className="h-full"
                   />
                 </CollapsibleContent>
               </Collapsible>
@@ -636,26 +664,26 @@ function TemplatesV3Page() {
           )}
 
           <div className={cn(
-            "flex-1 flex gap-4 overflow-hidden",
+            "flex-1 flex gap-4 overflow-hidden mt-4",
             isMobile ? "flex-col" : "flex-row"
           )}>
             {/* Editor Panel - Left column on tablet/desktop */}
             <div className={cn(
               "flex flex-col overflow-hidden",
-              isMobile ? "flex-1" : isTablet ? "w-[55%]" : "w-[40%]"
+              isMobile ? "w-full flex-1" : isTablet ? "w-[55%]" : "w-[40%]"
             )}>
-              <Tabs value={editorTab} onValueChange={handleTabChange} className="flex flex-col h-full">
-                <TabsList className="flex-shrink-0">
+              <Tabs value={editorTab} onValueChange={handleTabChange} className="flex flex-col h-full overflow-hidden">
+                <TabsList className="flex-shrink-0 w-full grid grid-cols-2">
                   <TabsTrigger value="visual">可视化编辑</TabsTrigger>
                   <TabsTrigger value="yaml">YAML 代码</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="visual" className="flex-1 overflow-hidden mt-4">
-                  <ScrollArea className="h-full pr-4">
-                    <div className="space-y-3">
+                <TabsContent value="visual" className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col data-[state=inactive]:hidden">
+                  <ScrollArea className="flex-1 h-full">
+                    <div className="space-y-3 pb-4 pr-3">
                       {/* Region Proxy Groups Toggle */}
                       <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                           <Label htmlFor="region-toggle" className="font-medium">开启区域代理组</Label>
                           <span className="text-xs text-muted-foreground">自动添加按地区分类的代理组</span>
                         </div>
@@ -683,7 +711,7 @@ function TemplatesV3Page() {
                           variables={templateVariables}
                         />
                       ))}
-                      <Button variant="outline" className="w-full" onClick={handleAddProxyGroup}>
+                      <Button variant="outline" className="w-full mt-2" onClick={handleAddProxyGroup}>
                         <Plus className="h-4 w-4 mr-2" />
                         添加代理组
                       </Button>
@@ -691,11 +719,11 @@ function TemplatesV3Page() {
                   </ScrollArea>
                 </TabsContent>
 
-                <TabsContent value="yaml" className="flex-1 overflow-hidden mt-4">
+                <TabsContent value="yaml" className="flex-1 min-h-0 overflow-hidden mt-4 flex flex-col data-[state=inactive]:hidden">
                   <Textarea
                     value={templateContent}
                     onChange={(e) => handleYamlChange(e.target.value)}
-                    className="h-full font-mono text-sm resize-none"
+                    className="flex-1 font-mono text-xs sm:text-sm resize-none p-4"
                     placeholder="YAML 内容..."
                   />
                 </TabsContent>
@@ -732,19 +760,22 @@ function TemplatesV3Page() {
 
       {/* List Preview Dialog */}
       <Dialog open={listPreviewOpen} onOpenChange={setListPreviewOpen}>
-        <DialogContent className="!w-[90vw] !max-w-[90vw] h-[85vh] flex flex-col" showCloseButton={false}>
+        <DialogContent className={cn(
+          "h-[85vh] flex flex-col",
+          isMobile ? "!w-[95vw] !max-w-[95vw] p-4" : "!w-[90vw] !max-w-[90vw]"
+        )} showCloseButton={false}>
           <DialogHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <DialogTitle>预览: {listPreviewTemplateName}</DialogTitle>
-                <DialogDescription>左侧为模板配置，右侧为最终订阅配置</DialogDescription>
+                <DialogTitle className="break-all truncate w-[200px] sm:w-auto">预览: {listPreviewTemplateName}</DialogTitle>
+                <DialogDescription className="hidden sm:block">左侧为模板配置，右侧为最终订阅配置</DialogDescription>
               </div>
-              <Button variant="outline" onClick={() => setListPreviewOpen(false)}>
+              <Button variant="outline" onClick={() => setListPreviewOpen(false)} size={isMobile ? "sm" : "default"}>
                 关闭
               </Button>
             </div>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden flex gap-4">
+          <div className={cn("flex-1 overflow-hidden flex gap-4", isMobile ? "flex-col" : "flex-row")}>
             {listPreviewLoading ? (
               <div className="flex items-center justify-center w-full h-full">
                 <span className="text-muted-foreground">正在生成预览...</span>
@@ -752,22 +783,22 @@ function TemplatesV3Page() {
             ) : (
               <>
                 {/* Left: Template Config */}
-                <div className="w-1/2 flex flex-col overflow-hidden">
+                <div className={cn("flex flex-col overflow-hidden", isMobile ? "h-1/2 w-full" : "w-1/2")}>
                   <div className="text-sm font-medium mb-2 text-muted-foreground">模板配置</div>
                   <Card className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full">
-                      <pre className="text-xs p-4 font-mono whitespace-pre-wrap break-all">
+                      <pre className="text-xs p-2 sm:p-4 font-mono whitespace-pre-wrap break-all">
                         {formatTemplateForDisplay(listPreviewTemplateContent)}
                       </pre>
                     </ScrollArea>
                   </Card>
                 </div>
                 {/* Right: Final Subscription Config */}
-                <div className="w-1/2 flex flex-col overflow-hidden">
+                <div className={cn("flex flex-col overflow-hidden", isMobile ? "h-1/2 w-full" : "w-1/2")}>
                   <div className="text-sm font-medium mb-2 text-muted-foreground">最终订阅配置</div>
                   <Card className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full">
-                      <pre className="text-xs p-4 font-mono whitespace-pre-wrap break-all">
+                      <pre className="text-xs p-2 sm:p-4 font-mono whitespace-pre-wrap break-all">
                         {listPreviewContent}
                       </pre>
                     </ScrollArea>
