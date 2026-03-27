@@ -143,8 +143,11 @@ func shouldApplyTlsSniFallback(node map[string]any) bool {
 	}
 }
 
-// applyTlsSniFallback keeps explicit empty value ("") and only fills missing key.
-// Fallback priority: transport Host -> non-IP server.
+// THIRD-PARTY BUG FIX
+// 允许设置 sni 为空字符串且为防止影响其他逻辑, 这里先改成这样判断
+// 本质上是为了防止本来应该使用 server 作为 sni 的情况下, 若之后进行了域名解析, 导致 server 变成 ip 丢失了 sni
+// 为了兼容性, 暂时先这么改
+// see https://github.com/sub-store-org/Sub-Store/commit/38e49e508b620dac29ae87178cfca80f750468ac
 func applyTlsSniFallback(node map[string]any, field string) {
 	if !shouldApplyTlsSniFallback(node) {
 		return
