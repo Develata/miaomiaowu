@@ -212,13 +212,29 @@ func parseProxyGroup(line string) ACLProxyGroup {
 }
 
 // IsRegexProxyPattern checks if a proxy name is a regex pattern
-// Format: (option1|option2|option3)
+// Supported examples: (option1|option2|option3), my.*, ^my-[0-9]+$
 func IsRegexProxyPattern(proxy string) bool {
 	proxy = strings.TrimSpace(proxy)
-	if len(proxy) < 3 {
+	if len(proxy) < 2 {
 		return false
 	}
-	return strings.HasPrefix(proxy, "(") && strings.HasSuffix(proxy, ")") && strings.Contains(proxy, "|")
+
+	likelyRegex := (strings.HasPrefix(proxy, "(") && strings.HasSuffix(proxy, ")")) ||
+		strings.Contains(proxy, ".*") || strings.Contains(proxy, ".+") || strings.Contains(proxy, ".?") ||
+		strings.HasPrefix(proxy, "^") || strings.HasSuffix(proxy, "$") ||
+		strings.Contains(proxy, "(?<!") || strings.Contains(proxy, "(?<=")
+
+	if !likelyRegex {
+		return false
+	}
+
+	// Treat as regex even when original syntax is not fully RE2-compatible.
+	// It will be normalized before matching.
+	if _, err := compileCompatibleRegex(proxy); err == nil {
+		return true
+	}
+
+	return true
 }
 
 // MergeRegexFilters merges multiple regex filters into one

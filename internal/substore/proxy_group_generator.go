@@ -2,7 +2,6 @@ package substore
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -15,7 +14,7 @@ func filterProxyNamesByRegex(allNames []string, regexFilters []string) []string 
 
 	// Merge all regex patterns into one
 	pattern := MergeRegexFilters(regexFilters)
-	re, err := regexp.Compile(pattern)
+	re, err := compileCompatibleRegex(pattern)
 	if err != nil {
 		// Invalid regex, return all names
 		return allNames
@@ -76,9 +75,11 @@ func GenerateClashProxyGroups(groups []ACLProxyGroup, allProxyNames []string) st
 		var proxiesToOutput []string
 
 		// By default, select groups that already reference other policies skip injecting actual nodes.
-		// url-test/fallback/load-balance always need nodes, and the .* wildcard forces inclusion
-		// of all available nodes regardless of existing policy references.
-		shouldAddActualNodes := len(normalProxies) == 0 || g.Type == "url-test" || g.Type == "fallback" || g.Type == "load-balance"
+		// url-test/fallback/load-balance always need nodes.
+		// If regex filters are present, we should still resolve matching node names.
+		// The .* wildcard forces inclusion of all available nodes regardless of existing policy references.
+		shouldAddActualNodes := len(normalProxies) == 0 || len(regexFilters) > 0 ||
+			g.Type == "url-test" || g.Type == "fallback" || g.Type == "load-balance"
 
 		if len(allProxyNames) > 0 {
 			// Explicit mode: use provided proxy names
@@ -102,7 +103,7 @@ func GenerateClashProxyGroups(groups []ACLProxyGroup, allProxyNames []string) st
 				lines = append(lines, "    include-all: true")
 			} else if len(regexFilters) > 0 {
 				lines = append(lines, "    include-all: true")
-				lines = append(lines, fmt.Sprintf("    filter: %s", MergeRegexFilters(regexFilters)))
+				lines = append(lines, fmt.Sprintf("    filter: %s", normalizeRegexPattern(MergeRegexFilters(regexFilters))))
 			}
 		}
 

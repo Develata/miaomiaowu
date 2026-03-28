@@ -1,7 +1,6 @@
 package substore
 
 import (
-	"regexp"
 	"strings"
 
 	"miaomiaowu/internal/logger"
@@ -739,7 +738,7 @@ func applyFilterPreservingGroups(proxies []string, filterPattern string, proxyGr
 			if pattern == "" {
 				continue
 			}
-			matched, err := regexp.MatchString(pattern, proxyName)
+			matched, err := matchCompatibleRegex(pattern, proxyName)
 			if err == nil && matched {
 				result = append(result, proxyName)
 				break
@@ -897,7 +896,7 @@ func applyFilter(proxies []string, filterPattern string) []string {
 			if pattern == "" {
 				continue
 			}
-			matched, err := regexp.MatchString(pattern, proxyName)
+			matched, err := matchCompatibleRegex(pattern, proxyName)
 			if err == nil && matched {
 				result = append(result, proxyName)
 				break
@@ -919,7 +918,7 @@ func applyExcludeFilter(proxies []string, excludePattern string) []string {
 			if pattern == "" {
 				continue
 			}
-			matched, err := regexp.MatchString(pattern, proxyName)
+			matched, err := matchCompatibleRegex(pattern, proxyName)
 			if err == nil && matched {
 				excluded = true
 				break
