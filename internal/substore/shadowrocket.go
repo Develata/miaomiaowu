@@ -55,7 +55,7 @@ func (p *ShadowrocketProducer) Produce(proxies []Proxy, outputType string, opts 
 			// VLESS with non-none encryption
 			if proxyType == "vless" {
 				encryption := GetString(proxy, "encryption")
-				if opts.ClientCompatibilityMode && encryption != "" && encryption != "none" {
+				if encryption != "" && encryption != "none" {
 					continue
 				}
 			}
