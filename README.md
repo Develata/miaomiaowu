@@ -251,6 +251,12 @@ MIT License
 <summary>更新日志</summary>
 
 
+### v0.6.1 (2026-04-10)
+- 🌈 绑定探针支持搜索与滚动
+- 🌈 编辑代理组节点支持选择分列数量
+- 🛠️ fix:trojan tls 总是为true
+- 🛠️ fix:移除小火箭vless enc判断
+- 🛠️ fix:编辑缓存重复提示
 ### v0.6.1 (2026-04-01)
 - 🌈 增加了一个彩蛋
 - 🛠️ fix:loon vless丢失参数
