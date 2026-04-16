@@ -3656,7 +3656,7 @@ function SubscribeFilesPage() {
                           const used = mode === 'download' ? sub.download : mode === 'upload' ? sub.upload : sub.upload + sub.download
                           const percentage = Math.min((used / sub.total) * 100, 100)
                           const remaining = Math.max(sub.total - used, 0)
-                          const modeLabel = mode === 'download' ? '仅下行' : mode === 'upload' ? '仅上行' : '上下行'
+                          const modeLabel = mode === 'download' ? '仅下行' : mode === 'upload' ? '仅上行' : mode === 'none' ? '不统计' : '上下行'
                           return (
                             <div className='flex items-center gap-2'>
                               <Tooltip>
@@ -3694,8 +3694,8 @@ function SubscribeFilesPage() {
                                     className='h-6 w-6 shrink-0'
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      // 循环切换: both -> download -> upload -> both
-                                      const nextMode = mode === 'both' ? 'download' : mode === 'download' ? 'upload' : 'both'
+                                      // 循环切换: both -> download -> upload -> none -> both
+                                      const nextMode = mode === 'both' ? 'download' : mode === 'download' ? 'upload' : mode === 'upload' ? 'none' :  'both'
                                       updateExternalSubMutation.mutate({
                                         id: sub.id,
                                         name: sub.name,
@@ -5553,7 +5553,7 @@ function SubscribeFilesPage() {
               <Label>流量统计方式</Label>
               <Select
                 value={editExternalSubForm.traffic_mode}
-                onValueChange={(value: 'download' | 'upload' | 'both') => setEditExternalSubForm(prev => ({ ...prev, traffic_mode: value }))}
+                onValueChange={(value: 'download' | 'upload' | 'both' | 'none') => setEditExternalSubForm(prev => ({ ...prev, traffic_mode: value }))}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -5562,6 +5562,7 @@ function SubscribeFilesPage() {
                   <SelectItem value='both'>上下行 (download + upload)</SelectItem>
                   <SelectItem value='download'>仅下行 (download)</SelectItem>
                   <SelectItem value='upload'>仅上行 (upload)</SelectItem>
+                  <SelectItem value='none'>不统计 (none)</SelectItem>
                 </SelectContent>
               </Select>
               <p className='text-xs text-muted-foreground'>
