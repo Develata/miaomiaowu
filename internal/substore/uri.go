@@ -115,6 +115,8 @@ func (p *URIProducer) Produce(proxies []Proxy, outputType string, opts *ProduceO
 			uri, err = p.encodeTUIC(proxy)
 		case "socks5":
 			uri, err = p.encodeSOCKS5(proxy)
+		case "http":
+			uri, err = p.encodeHTTP(proxy)
 		case "wireguard":
 			uri, err = p.encodeWireGuard(proxy)
 		case "anytls":
@@ -948,6 +950,29 @@ func (p *URIProducer) encodeSOCKS5(proxy Proxy) (string, error) {
 
 	uri := fmt.Sprintf("socks://%s@%s:%d%s#%s",
 		url.PathEscape(encoded), server, port, params, url.PathEscape(name))
+	return uri, nil
+}
+
+func (p *URIProducer) encodeHTTP(proxy Proxy) (string, error) {
+	server := GetString(proxy, "server")
+	port := GetInt(proxy, "port")
+	username := GetString(proxy, "username")
+	password := GetString(proxy, "password")
+	name := GetString(proxy, "name")
+	tls := GetBool(proxy, "tls")
+
+	scheme := "http"
+	if tls {
+		scheme = "https"
+	}
+
+	var authPart string
+	if username != "" {
+		authPart = url.PathEscape(username) + ":" + url.PathEscape(password) + "@"
+	}
+
+	uri := fmt.Sprintf("%s://%s%s:%d#%s",
+		scheme, authPart, server, port, url.PathEscape(name))
 	return uri, nil
 }
 

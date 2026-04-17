@@ -540,17 +540,16 @@ function parseShadowsocks(url: string): ProxyNode | null {
  * 解析 SOCKS 协议
  * 支持两种格式:
  * 1. socks://base64(user:password)@server:port?#name (x-ray 内核格式)
- * 2. socks5://user:password@server:port#name (通用格式，自动转换)
+ * 2. socks://user:password@server:port#name (明文格式，兼容)
+ * 3. socks5://user:password@server:port#name (通用格式)
  */
 function parseSocks(url: string): ProxyNode | null {
   try {
     let content: string
-    let isPlainAuth = false  // 标记是否是明文认证格式 (socks5://)
 
-    // 检测是 socks:// 还是 socks5:// 格式
+    // 统一去掉 scheme
     if (url.startsWith('socks5://')) {
       content = url.substring('socks5://'.length)
-      isPlainAuth = true
     } else {
       content = url.substring('socks://'.length)
     }
@@ -565,7 +564,7 @@ function parseSocks(url: string): ProxyNode | null {
       name = decodeURIComponent(content.substring(hashIndex + 1))
     }
 
-    // 移除可能存在的查询参数 (? 后面的部分，在 # 之前)
+    // 移除查询参数
     if (mainPart.includes('?')) {
       mainPart = mainPart.split('?')[0]
     }
@@ -573,22 +572,10 @@ function parseSocks(url: string): ProxyNode | null {
     // 解析 auth@server:port
     const atIndex = mainPart.lastIndexOf('@')
     if (atIndex === -1) {
-      // 没有认证信息的情况
       const [server, portStr] = mainPart.split(':')
       const port = parseInt(portStr) || 0
-
-      // 如果没有名称，自动生成
-      if (!name) {
-        name = `${server}:${port}`
-      }
-
-      return {
-        name,
-        type: 'socks5',
-        server,
-        port,
-        udp: true
-      }
+      if (!name) name = `${server}:${port}`
+      return { name, type: 'socks5', server, port, udp: true }
     }
 
     const authPart = mainPart.substring(0, atIndex)
@@ -597,17 +584,13 @@ function parseSocks(url: string): ProxyNode | null {
     let username = ''
     let password = ''
 
-    if (isPlainAuth) {
-      // socks5:// 格式: user:password 是明文
+    // 智能判断：auth 中含 : 说明是明文 user:password，否则尝试 base64 解码
+    if (authPart.includes(':')) {
       const colonIndex = authPart.indexOf(':')
-      if (colonIndex !== -1) {
-        username = decodeURIComponent(authPart.substring(0, colonIndex))
-        password = decodeURIComponent(authPart.substring(colonIndex + 1))
-      } else {
-        username = decodeURIComponent(authPart)
-      }
+      username = decodeURIComponent(authPart.substring(0, colonIndex))
+      password = decodeURIComponent(authPart.substring(colonIndex + 1))
     } else {
-      // socks:// 格式: user:password 是 base64 编码的
+      // 无冒号，尝试 base64 解码
       const decoded = base64Decode(authPart)
       const colonIndex = decoded.indexOf(':')
       if (colonIndex !== -1) {
@@ -623,7 +606,6 @@ function parseSocks(url: string): ProxyNode | null {
     let port = 0
 
     if (serverPart.startsWith('[')) {
-      // IPv6 地址格式: [ipv6]:port
       const closeBracketIndex = serverPart.indexOf(']')
       if (closeBracketIndex !== -1) {
         server = serverPart.substring(1, closeBracketIndex)
@@ -631,7 +613,6 @@ function parseSocks(url: string): ProxyNode | null {
         port = parseInt(portPart.replace(':', '')) || 0
       }
     } else {
-      // IPv4 或域名
       const lastColonIndex = serverPart.lastIndexOf(':')
       if (lastColonIndex !== -1) {
         server = serverPart.substring(0, lastColonIndex)
@@ -641,10 +622,7 @@ function parseSocks(url: string): ProxyNode | null {
       }
     }
 
-    // 如果没有名称，自动生成
-    if (!name) {
-      name = `${server}:${port}`
-    }
+    if (!name) name = `${server}:${port}`
 
     return {
       name,
@@ -653,10 +631,91 @@ function parseSocks(url: string): ProxyNode | null {
       port,
       username,
       password,
-      udp: true  // SOCKS5 默认支持 UDP
+      udp: true
     }
   } catch (e) {
     toast(`'Parse SOCKS error:' ${e instanceof Error ? e.message : String(e)}`)
+    return null
+  }
+}
+
+/**
+ * 解析 HTTP 代理
+ * 格式: http://user:password@server:port#name
+ */
+function parseHttp(url: string): ProxyNode | null {
+  try {
+    const isTls = url.startsWith('https://')
+    const content = url.substring(isTls ? 'https://'.length : 'http://'.length)
+
+    let mainPart = content
+    let name = ''
+
+    if (content.includes('#')) {
+      const hashIndex = content.lastIndexOf('#')
+      mainPart = content.substring(0, hashIndex)
+      name = decodeURIComponent(content.substring(hashIndex + 1))
+    }
+
+    if (mainPart.includes('?')) {
+      mainPart = mainPart.split('?')[0]
+    }
+
+    const atIndex = mainPart.lastIndexOf('@')
+
+    let username = ''
+    let password = ''
+    let serverPart: string
+
+    if (atIndex === -1) {
+      serverPart = mainPart
+    } else {
+      const authPart = mainPart.substring(0, atIndex)
+      serverPart = mainPart.substring(atIndex + 1)
+      const colonIndex = authPart.indexOf(':')
+      if (colonIndex !== -1) {
+        username = decodeURIComponent(authPart.substring(0, colonIndex))
+        password = decodeURIComponent(authPart.substring(colonIndex + 1))
+      } else {
+        username = decodeURIComponent(authPart)
+      }
+    }
+
+    let server = ''
+    let port = 0
+
+    if (serverPart.startsWith('[')) {
+      const closeBracketIndex = serverPart.indexOf(']')
+      if (closeBracketIndex !== -1) {
+        server = serverPart.substring(1, closeBracketIndex)
+        const portPart = serverPart.substring(closeBracketIndex + 1)
+        port = parseInt(portPart.replace(':', '')) || (isTls ? 443 : 80)
+      }
+    } else {
+      const lastColonIndex = serverPart.lastIndexOf(':')
+      if (lastColonIndex !== -1) {
+        server = serverPart.substring(0, lastColonIndex)
+        port = parseInt(serverPart.substring(lastColonIndex + 1)) || (isTls ? 443 : 80)
+      } else {
+        server = serverPart
+        port = isTls ? 443 : 80
+      }
+    }
+
+    if (!name) name = `${server}:${port}`
+
+    const node: ProxyNode = {
+      name,
+      type: 'http',
+      server,
+      port,
+      username,
+      password,
+    }
+    if (isTls) node.tls = true
+    return node
+  } catch (e) {
+    toast(`Parse HTTP error: ${e instanceof Error ? e.message : String(e)}`)
     return null
   }
 }
@@ -1175,6 +1234,8 @@ export function parseProxyUrl(url: string): ProxyNode | null {
     return parseShadowsocks(url)
   } else if (url.startsWith('socks://') || url.startsWith('socks5://')) {
     return parseSocks(url)
+  } else if (url.startsWith('http://') || url.startsWith('https://')) {
+    return parseHttp(url)
   // } else if (url.startsWith('snell://')) {
   //   return parseSnell(url)
   } else if (url.startsWith('trojan://')) {
@@ -1290,8 +1351,8 @@ export function toClashProxy(node: ProxyNode): ClashProxy {
     clash.password = node.password
   }
 
-  // SOCKS5 协议专用字段
-  if (node.type === 'socks5' || node.type === 'socks') {
+  // SOCKS5/HTTP 协议专用字段
+  if (node.type === 'socks5' || node.type === 'socks' || node.type === 'http') {
     if (node.username) clash.username = node.username as string
     if (node.password) clash.password = node.password as string
   }
