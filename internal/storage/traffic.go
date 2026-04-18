@@ -236,6 +236,8 @@ type SubscribeFile struct {
 	SelectedTags        []string   // 选中的节点标签，为空表示使用所有节点
 	RawOutput           bool       // 非Clash配置，直接输出原始内容
 	SortOrder           int        // 排序权重，值越小越靠前
+	TrafficLimit        *float64   // 手动设置的总流量上限(GB)，nil表示跟随探针
+	StatsServerIDs      string     // 统计服务器的探针服务器ID列表(逗号分隔)
 	ExpireAt            *time.Time // Optional expiration timestamp
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
@@ -859,6 +861,16 @@ CREATE INDEX IF NOT EXISTS idx_external_subscriptions_url ON external_subscripti
 
 	// Add raw_output column to subscribe_files table
 	if err := r.ensureSubscribeFileColumn("raw_output", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
+	// Add traffic_limit column to subscribe_files table
+	if err := r.ensureSubscribeFileColumn("traffic_limit", "REAL"); err != nil {
+		return err
+	}
+
+	// Add stats_server_ids column to subscribe_files table
+	if err := r.ensureSubscribeFileColumn("stats_server_ids", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 

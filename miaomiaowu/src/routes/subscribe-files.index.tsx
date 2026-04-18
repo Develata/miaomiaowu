@@ -60,6 +60,8 @@ type SubscribeFile = {
   selected_tags: string[]
   custom_short_code?: string
   raw_output: boolean
+  traffic_limit?: number | null
+  stats_server_ids: string
   expire_at?: string | null
   created_at: string
   updated_at: string
@@ -356,6 +358,8 @@ function SubscribeFilesPage() {
     template_filename: '',
     selected_tags: [] as string[],
     expire: undefined as Date | undefined,
+    traffic_limit: '' as string,
+    stats_server_ids: '' as string,
   })
 
   // 外部订阅卡片折叠状态 - 默认折叠
@@ -429,6 +433,26 @@ function SubscribeFilesPage() {
 
   const files = filesData?.files ?? []
 
+  // 获取订阅流量数据（仅针对配置了 traffic_limit 或 stats_server_ids 的订阅）
+  const { data: subscribeTrafficData } = useQuery({
+    queryKey: ['subscribe-traffic'],
+    queryFn: async () => {
+      const response = await api.get('/api/traffic/subscribe')
+      return response.data as Array<{ id: number; limit_gb: number; used_gb: number }>
+    },
+    enabled: Boolean(auth.accessToken) && files.some(f => f.traffic_limit != null || f.stats_server_ids),
+    refetchInterval: 5 * 60 * 1000,
+  })
+  const subscribeTrafficMap = useMemo(() => {
+    const map = new Map<number, { limit_gb: number; used_gb: number }>()
+    if (subscribeTrafficData) {
+      for (const item of subscribeTrafficData) {
+        map.set(item.id, item)
+      }
+    }
+    return map
+  }, [subscribeTrafficData])
+
   // 获取 V3 模板列表
   const { data: templatesData } = useQuery({
     queryKey: ['template-v3-list'],
@@ -485,6 +509,21 @@ function SubscribeFilesPage() {
     enabled: Boolean(auth.accessToken && enableProxyProvider),
   })
   const proxyProviderConfigs = proxyProviderConfigsData ?? []
+
+  // 获取探针服务器列表（用于统计服务器选择）
+  const { data: probeConfigData } = useQuery({
+    queryKey: ['probe-config'],
+    queryFn: async () => {
+      const response = await api.get('/api/admin/probe-config')
+      return response.data as {
+        config: {
+          servers: Array<{ id: number; name: string; server_id: string }>
+        }
+      }
+    },
+    enabled: Boolean(auth.accessToken),
+  })
+  const probeServers = probeConfigData?.config?.servers ?? []
 
   // 绑定v3模板
   const hasTemplateBindings = files.some(f => f.template_filename)
@@ -637,7 +676,7 @@ function SubscribeFilesPage() {
       toast.success('订阅信息已更新')
       setEditMetadataDialogOpen(false)
       setEditingMetadata(null)
-      setMetadataForm({ name: '', description: '', filename: '', template_filename: '', selected_tags: [] })
+      setMetadataForm({ name: '', description: '', filename: '', template_filename: '', selected_tags: [], traffic_limit: '', stats_server_ids: '' })
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || '更新失败')
@@ -1521,6 +1560,8 @@ function SubscribeFilesPage() {
       template_filename: file.template_filename || '',
       selected_tags: file.selected_tags || [],
       expire: file.expire_at ? new Date(file.expire_at) : undefined,
+      traffic_limit: file.traffic_limit != null ? String(file.traffic_limit) : '',
+      stats_server_ids: file.stats_server_ids || '',
     })
     setEditMetadataDialogOpen(true)
   }
@@ -1550,6 +1591,8 @@ function SubscribeFilesPage() {
               return endOfDay.toISOString()
             })()
           : '',
+        traffic_limit: metadataForm.traffic_limit ? parseFloat(metadataForm.traffic_limit) : null,
+        stats_server_ids: metadataForm.stats_server_ids,
       },
     })
   }
@@ -1658,7 +1701,7 @@ function SubscribeFilesPage() {
   }
 
   // 应用缺失节点替换
-  const handleApplyReplacement = () => {
+  const handleApplyReplacement = async () => {
     try {
       const parsedConfig = parseYAML(pendingConfigAfterSave) as any
       const rules = parsedConfig.rules || []
@@ -1700,19 +1743,29 @@ function SubscribeFilesPage() {
 
       // 转换回YAML
       const finalConfig = dumpYAML(parsedConfig, { lineWidth: -1, noRefs: true })
+
+      // 保存到文件
+      if (editingNodesFile) {
+        await api.put(`/api/admin/subscribe-files/${encodeURIComponent(editingNodesFile.filename)}/content`, {
+          content: finalConfig,
+        })
+      }
+
       setConfigContent(finalConfig)
 
       // 更新查询缓存
       queryClient.setQueryData(['nodes-config-content', editingNodesFile?.filename], {
         content: finalConfig
       })
+      queryClient.invalidateQueries({ queryKey: ['subscribe-files'] })
 
-      // 只关闭替换对话框，不关闭编辑节点对话框
+      // 关闭替换对话框和编辑节点对话框
       setMissingNodesDialogOpen(false)
+      setEditNodesDialogOpen(false)
       if (editingNodesFile) {
         localStorage.removeItem(EDIT_NODES_DRAFT_KEY_PREFIX + editingNodesFile.id)
       }
-      toast.success(`已将缺失节点替换为 ${replacementChoice}`)
+      toast.success(`已保存节点配置（缺失节点已替换为 ${replacementChoice}）`)
     } catch (error) {
       const message = error instanceof Error ? error.message : '应用替换失败'
       toast.error(message)
@@ -2233,19 +2286,20 @@ function SubscribeFilesPage() {
         setPendingConfigAfterSave(newContent)
         setMissingNodesDialogOpen(true)
       } else {
-        // 没有缺失节点，直接应用
-        // 更新编辑配置对话框中的内容
+        // 没有缺失节点，直接保存到文件
+        await api.put(`/api/admin/subscribe-files/${encodeURIComponent(editingNodesFile.filename)}/content`, {
+          content: newContent,
+        })
         setConfigContent(newContent)
-        // 同步更新 nodesConfigQuery 缓存，防止重新打开对话框时回退到旧数据
         queryClient.setQueryData(['nodes-config-content', editingNodesFile?.filename], {
           content: newContent
         })
-        // 只关闭编辑节点对话框，不保存到文件
+        queryClient.invalidateQueries({ queryKey: ['subscribe-files'] })
         setEditNodesDialogOpen(false)
         if (editingNodesFile) {
           localStorage.removeItem(EDIT_NODES_DRAFT_KEY_PREFIX + editingNodesFile.id)
         }
-        toast.success('已应用节点配置')
+        toast.success('已保存节点配置')
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '应用配置失败'
@@ -3047,6 +3101,46 @@ function SubscribeFilesPage() {
                     cellClassName: 'text-center',
                     width: '140px'
                   }] as DataTableColumn<SubscribeFile>[] : []),
+                  {
+                    header: '流量',
+                    cell: (file) => {
+                      const traffic = subscribeTrafficMap.get(file.id)
+                      if (!traffic || traffic.limit_gb === 0) {
+                        return <span className='text-muted-foreground'>-</span>
+                      }
+                      const percentage = Math.min((traffic.used_gb / traffic.limit_gb) * 100, 100)
+                      const remainingGB = Math.max(traffic.limit_gb - traffic.used_gb, 0)
+                      return (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className='w-20 space-y-1 cursor-help'>
+                              <Progress value={percentage} className='h-2' />
+                              <div className='text-xs text-center text-muted-foreground'>
+                                {percentage.toFixed(0)}%
+                              </div>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className='space-y-1'>
+                            <div className='text-xs'>
+                              <span className='font-medium'>已用: </span>
+                              {traffic.used_gb.toFixed(2)} GB
+                            </div>
+                            <div className='text-xs'>
+                              <span className='font-medium'>总量: </span>
+                              {traffic.limit_gb.toFixed(2)} GB
+                            </div>
+                            <div className='text-xs'>
+                              <span className='font-medium'>剩余: </span>
+                              {remainingGB.toFixed(2)} GB
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      )
+                    },
+                    headerClassName: 'text-center',
+                    cellClassName: 'text-center',
+                    width: '100px',
+                  },
                   {
                     header: '操作',
                     cell: (file) => {
@@ -4407,7 +4501,7 @@ function SubscribeFilesPage() {
         setEditMetadataDialogOpen(open)
         if (!open) {
           setEditingMetadata(null)
-          setMetadataForm({ name: '', description: '', filename: '', template_filename: '', selected_tags: [], expire: undefined })
+          setMetadataForm({ name: '', description: '', filename: '', template_filename: '', selected_tags: [], expire: undefined, traffic_limit: '', stats_server_ids: '' })
         }
       }}>
         <DialogContent className='sm:max-w-lg'>
@@ -4590,6 +4684,56 @@ function SubscribeFilesPage() {
                 </p>
               </div>
             )}
+            <div className='space-y-2'>
+              <Label htmlFor='traffic-limit'>总流量上限（GB，可选）</Label>
+              <Input
+                id='traffic-limit'
+                type='number'
+                min='0'
+                step='0.01'
+                value={metadataForm.traffic_limit}
+                onChange={(e) => setMetadataForm({ ...metadataForm, traffic_limit: e.target.value })}
+                placeholder='留空则使用探针服务器的总流量'
+              />
+              <p className='text-xs text-muted-foreground'>
+                手动设置总流量上限，订阅信息中的总流量将使用此值。留空则跟随探针。
+              </p>
+            </div>
+            <div className='space-y-2'>
+              <Label>统计服务器（可选）</Label>
+              {probeServers.length > 0 ? (
+                <>
+                  <div className='flex flex-wrap gap-2'>
+                    {probeServers.map((srv) => {
+                      const selectedIds = metadataForm.stats_server_ids ? metadataForm.stats_server_ids.split(',').map(s => s.trim()).filter(Boolean) : []
+                      const isSelected = selectedIds.includes(srv.server_id)
+                      return (
+                        <Button
+                          key={srv.server_id}
+                          variant={isSelected ? 'default' : 'outline'}
+                          size='sm'
+                          onClick={() => {
+                            const newIds = isSelected
+                              ? selectedIds.filter(id => id !== srv.server_id)
+                              : [...selectedIds, srv.server_id]
+                            setMetadataForm({ ...metadataForm, stats_server_ids: newIds.join(',') })
+                          }}
+                        >
+                          {srv.name}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                  <p className='text-xs text-muted-foreground'>
+                    选择后，订阅信息中的已用流量将只统计选中服务器的流量。不选择则使用全部服务器。
+                  </p>
+                </>
+              ) : (
+                <p className='text-xs text-muted-foreground'>
+                  未配置探针服务器，请先在节点管理中配置探针。
+                </p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button

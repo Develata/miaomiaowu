@@ -813,22 +813,40 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if hasTrafficInfo || externalTrafficLimit > 0 {
 		var finalLimit, finalUsed int64
 
-		// 判断是否需要包含探针流量：
-		// 1. 探针服务器绑定关闭时，始终包含探针流量
-		// 2. 探针服务器绑定开启时，只有使用了探针节点才包含探针流量
-		includeProbeTraffic := !probeBindingEnabled || usesProbeNodes
-
-		if includeProbeTraffic && hasTrafficInfo {
-			finalLimit = totalLimit + externalTrafficLimit
-			finalUsed = totalUsed + externalTrafficUsed
-			logger.Info("[Subscription] 最终流量统计", "user", username)
-			logger.Info("[Subscription] 探针流量", "limit_bytes", totalLimit, "limit_gb", float64(totalLimit)/(1024*1024*1024), "used_bytes", totalUsed, "used_gb", float64(totalUsed)/(1024*1024*1024))
+		if hasSubscribeFile && subscribeFile.StatsServerIDs != "" {
+			// 订阅文件配置了统计服务器，按 server_id 过滤探针流量（优先级最高）
+			idList := strings.Split(subscribeFile.StatsServerIDs, ",")
+			statsLimit, _, statsUsed, statsErr := h.summary.fetchTotalsByServerIDs(r.Context(), idList)
+			if statsErr == nil {
+				if subscribeFile.TrafficLimit != nil {
+					finalLimit = int64(*subscribeFile.TrafficLimit*1024*1024*1024) + externalTrafficLimit
+				} else {
+					finalLimit = statsLimit + externalTrafficLimit
+				}
+				finalUsed = statsUsed + externalTrafficUsed
+			} else {
+				finalLimit = externalTrafficLimit
+				finalUsed = externalTrafficUsed
+			}
+		} else if hasSubscribeFile && subscribeFile.TrafficLimit != nil {
+			// 仅配置了总流量上限，已用流量走原有逻辑
+			includeProbeTraffic := !probeBindingEnabled || usesProbeNodes
+			finalLimit = int64(*subscribeFile.TrafficLimit*1024*1024*1024) + externalTrafficLimit
+			if includeProbeTraffic && hasTrafficInfo {
+				finalUsed = totalUsed + externalTrafficUsed
+			} else {
+				finalUsed = externalTrafficUsed
+			}
 		} else {
-			// 仅统计外部订阅流量
-			finalLimit = externalTrafficLimit
-			finalUsed = externalTrafficUsed
-			logger.Info("[Subscription] 最终流量统计(仅外部订阅)", "user", username)
-			logger.Info("[Subscription] 探针流量未包含(探针绑定已开启但未使用探针节点)")
+			// 原有逻辑
+			includeProbeTraffic := !probeBindingEnabled || usesProbeNodes
+			if includeProbeTraffic && hasTrafficInfo {
+				finalLimit = totalLimit + externalTrafficLimit
+				finalUsed = totalUsed + externalTrafficUsed
+			} else {
+				finalLimit = externalTrafficLimit
+				finalUsed = externalTrafficUsed
+			}
 		}
 
 		logger.Info("[Subscription] 外部订阅流量", "limit_bytes", externalTrafficLimit, "limit_gb", float64(externalTrafficLimit)/(1024*1024*1024), "used_bytes", externalTrafficUsed, "used_gb", float64(externalTrafficUsed)/(1024*1024*1024))

@@ -461,6 +461,12 @@ func (h *subscribeFilesHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	if req.RawOutput != nil {
 		existing.RawOutput = *req.RawOutput
 	}
+	if req.TrafficLimit != nil {
+		existing.TrafficLimit = req.TrafficLimit
+	}
+	if req.StatsServerIDs != nil {
+		existing.StatsServerIDs = *req.StatsServerIDs
+	}
 	// 更新模板绑定（绑定模板后禁用规则同步）
 	templateJustBound := false
 	tagsChanged := false
@@ -682,6 +688,8 @@ type subscribeFileRequest struct {
 	CustomShortCode     *string  `json:"custom_short_code,omitempty"`      // 自定义短链接码
 	ExpireAt            *string  `json:"expire_at,omitempty"`
 	RawOutput           *bool    `json:"raw_output,omitempty"` // 非Clash配置，直接输出原始内容
+	TrafficLimit        *float64 `json:"traffic_limit,omitempty"`
+	StatsServerIDs      *string  `json:"stats_server_ids,omitempty"`
 }
 
 type subscribeFileDTO struct {
@@ -696,6 +704,8 @@ type subscribeFileDTO struct {
 	SelectedTags        []string   `json:"selected_tags"`
 	CustomShortCode     string     `json:"custom_short_code"`
 	RawOutput           bool       `json:"raw_output"`
+	TrafficLimit        *float64   `json:"traffic_limit"`
+	StatsServerIDs      string     `json:"stats_server_ids"`
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
 	LatestVersion       int64      `json:"latest_version,omitempty"`
@@ -718,6 +728,8 @@ func convertSubscribeFile(file storage.SubscribeFile) subscribeFileDTO {
 		SelectedTags:        selectedTags,
 		CustomShortCode:     file.CustomShortCode,
 		RawOutput:           file.RawOutput,
+		TrafficLimit:        file.TrafficLimit,
+		StatsServerIDs:      file.StatsServerIDs,
 		CreatedAt:           file.CreatedAt,
 		UpdatedAt:           file.UpdatedAt,
 	}
@@ -775,6 +787,8 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		Content          string   `json:"content"`
 		TemplateFilename string   `json:"template_filename"` // V3 模板文件名
 		SelectedTags     []string `json:"selected_tags"`     // V3 模式下选择的标签
+		TrafficLimit     *float64 `json:"traffic_limit"`
+		StatsServerIDs   string   `json:"stats_server_ids"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -917,6 +931,8 @@ func (h *subscribeFilesHandler) handleCreateFromConfig(w http.ResponseWriter, r 
 		Filename:         filename,
 		TemplateFilename: req.TemplateFilename,
 		SelectedTags:     req.SelectedTags,
+		TrafficLimit:     req.TrafficLimit,
+		StatsServerIDs:   req.StatsServerIDs,
 	}
 
 	created, err := h.repo.CreateSubscribeFile(r.Context(), file)
