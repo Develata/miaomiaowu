@@ -250,6 +250,9 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.6.5 (2026-04-25)
+- 🛠️ fix:节点名称过滤的默认表达式无法删除[#70](https://github.com/iluobei/miaomiaowu/issues/70)
+- 🛠️ fix:订阅过期时间丢失
 ### v0.6.4 (2026-04-19)
 - 🌈 新增订阅流量设置
 - 🌈 简化探针绑定服务器流量设置
